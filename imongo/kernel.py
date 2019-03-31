@@ -275,17 +275,16 @@ class MongoKernel(Kernel):
 
         if not silent and output:
             json_data = self._parse_shell_output(output)
-            poutput = self._pretty_output(json_data)
-            html_str, js_str = poutput if poutput else (None, None)
-            html_msg = {'data': {'text/html': html_str}}
-            js_msg = {'data': {'application/javascript': js_str}}
-            self.send_response(self.iopub_socket, 'display_data', html_msg)
-            self.send_response(self.iopub_socket, 'display_data', js_msg)
+            display_content = {
+                'source': 'kernel',
+                'data': {
+                    'text/plain': output
+                }, 'metadata': {}
+            }
+            if json_data:
+                display_content["data"]["application/json"] = json_data
 
-            result = {'data': {'text/plain': output},
-                      'execution_count': self.execution_count}
-            logger.debug(result)
-            self.send_response(self.iopub_socket, 'execute_result', result)
+            self.send_response(self.iopub_socket, 'display_data', display_content)
 
         # TODO: Error catching messages such as the one below:
         # 2016-11-14T12:47:11.718+0900 E QUERY    [thread1] ReferenceError: aaa is not defined : @(shell):1:1
