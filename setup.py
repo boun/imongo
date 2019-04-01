@@ -35,8 +35,8 @@ with open('README.rst', 'r') as f:
     long_description = f.read()
 
 setup(name='imongo-kernel',
-      version='0.1.0',
-      description='A MongoDB kernel for Jupyter',
+      version='0.2.0',
+      description='A MongoDB kernel for Jupyter Lab',
       long_description=long_description,
       author='Gustavo Bezerra',
       author_email='gusutabopb@gmail.com',
