@@ -46,6 +46,11 @@ class MongoShellWrapper(replwrap.REPLWrapper):
                 output.append(l)
         return output[0]
 
+    def _isbeforeempty(self):
+        condition1 = self.child.before.strip() == '\x1b[47G\x1b[J\x1b[47G'
+        condition2 = self.child.before.strip() == ''
+        return condition1 or condition2
+
     def _isbufferempty(self):
         condition1 = self.child.buffer.strip() == '\x1b[47G\x1b[J\x1b[47G'
         condition2 = self.child.buffer.strip() == ''
@@ -102,6 +107,16 @@ class MongoShellWrapper(replwrap.REPLWrapper):
 
         match = self._expect_prompt(timeout=timeout)
         logger.debug('Prompt type: {}'.format(match))
+        logger.debug('Before (%d)       : %s ' % (len(self.child.before), ":".join("{:02x}".format(ord(c)) for c in self.child.before)))
+        logger.debug('Buffer (%d)       : %s ' % (len(self.child.buffer), ":".join("{:02x}".format(ord(c)) for c in self.child.buffer)))
+        logger.debug("Before %s " % self._isbeforeempty())
+        logger.debug("Before %s " % self._isbufferempty())
+        logger.debug("Before %s " % self.child.before)
+
+        if self._isbeforeempty() and self._isbufferempty() and len(self.child.before) == 15:
+            logger.debug('Extra waiting: ')
+            match = self._expect_prompt(timeout=1)
+    
 
         logger.debug('Iterating over message')
         response = []
@@ -314,20 +329,18 @@ class MongoKernel(Kernel):
         if was_shell_cmd and output:
             # Do not do any parsing into fancy JSON strings for visualization
             # in case of shell commands
-            result = {'data': {'text/plain': output},
-                      'execution_count': self.execution_count}
-            logger.debug(result)
-            self.send_response(self.iopub_socket, 'execute_result', result)
+            display_content = {
+                'source': 'kernel',
+                'data': {
+                    'text/plain': output
+                }, 'metadata': {}
+            }
+            self.send_response(self.iopub_socket, 'display_data', display_content)
 
         if not silent and not was_shell_cmd and output:
             # BOUN Hier wird der String rein geworfen
             json_data = self._parse_shell_output(output)
-            poutput = self._pretty_output(json_data)
-            html_str, js_str = poutput if poutput else (None, None)
             plain_msg = output
-            #self.send_response(self.iopub_socket, 'display_data', html_msg)
-            #self.send_response(self.iopub_socket, 'display_data', js_msg)
-            #self.send_response(self.iopub_socket, 'stdout', plain_msg)
 
             display_content = {
                 'source': 'kernel',
@@ -338,7 +351,6 @@ class MongoKernel(Kernel):
             if json_data:
                 logger.debug(plain_msg)
                 display_content["data"]["application/json"] = json_data
-                #display_content["data"]["application/javascript"] = js_str
 
             logger.debug(display_content)
             self.send_response(self.iopub_socket, 'display_data', display_content)
