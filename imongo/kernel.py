@@ -107,8 +107,8 @@ class MongoShellWrapper(replwrap.REPLWrapper):
 
         match = self._expect_prompt(timeout=timeout)
         logger.debug('Prompt type: {}'.format(match))
-        logger.debug('Before (%d)       : %s ' % (len(self.child.before), ":".join("{:02x}".format(ord(c)) for c in self.child.before)))
-        logger.debug('Buffer (%d)       : %s ' % (len(self.child.buffer), ":".join("{:02x}".format(ord(c)) for c in self.child.buffer)))
+        #logger.debug('Before (%d)       : %s ' % (len(self.child.before), ":".join("{:02x}".format(ord(c)) for c in self.child.before)))
+        #logger.debug('Buffer (%d)       : %s ' % (len(self.child.buffer), ":".join("{:02x}".format(ord(c)) for c in self.child.buffer)))
         logger.debug("Before %s " % self._isbeforeempty())
         logger.debug("Before %s " % self._isbufferempty())
         logger.debug("Before %s " % self.child.before)
@@ -178,13 +178,14 @@ class MongoKernel(Kernel):
         # dir_func is an assistant Javascript function to be used by do_complete.
         # May be a slightly hackish approach.
         # http://stackoverflow.com/questions/5523747/equivalent-of-pythons-dir-in-javascript
+        nop_func = """function nop() { return "";}"""
         dir_func = """function dir(object) {
                           attributes = [];
                           for (attr in object) {attributes.push(attr);}
                           attributes.sort();
                           return attributes;}"""
         try:
-            spawn_cmd = ['mongo', f'--eval "{prompt_cmd}; {dir_func}"']
+            spawn_cmd = ['mongo', f'--eval "{prompt_cmd}; {dir_func}; {nop_func}"']
             spawn_cmd += self._parse_spawn_options() + ['--shell']
             self.mongowrapper = MongoShellWrapper(' '.join(spawn_cmd), orig_prompt=prompt,
                                                   prompt_change=None, continuation_prompt=cont_prompt)
@@ -280,6 +281,7 @@ class MongoKernel(Kernel):
         sys_encoding = sys.getdefaultencoding()
 
         response = []
+
         for l in cmd_lines:
             process = Popen(l.split(), stdout=PIPE, stderr=PIPE)
             stdout, stderr = process.communicate()
@@ -307,6 +309,8 @@ class MongoKernel(Kernel):
                 output = self.run_shell_command(code_lines[1:])
             else:
                 output = self.mongowrapper.run_command(code.rstrip())
+                # Send a second nop, to receive ALL data
+                output += self.mongowrapper.run_command("nop()")
         except KeyboardInterrupt:
             self.mongowrapper.child.sendeof()
             interrupted = True
