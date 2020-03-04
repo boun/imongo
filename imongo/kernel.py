@@ -10,7 +10,7 @@ from pexpect import replwrap, EOF
 
 from . import utils
 
-__version__ = '0.2.0'
+__version__ = '0.3.0'
 version_pat = re.compile(r'version\D*(\d+(\.\d+)+)')
 
 log_file = os.path.join(os.path.split(__file__)[0], 'imongo_kernel.log')

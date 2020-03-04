@@ -3,7 +3,7 @@ imongo
 
 A MongoDB kernel for Jupyter Lab. Mainly for educational purposes.
 
-This kernel wraps the Mongo shell using pexpect_ and leaves the heavy lifting to metakernel. It is heavily based on iMongo by Gustavo Bezerra.
+This kernel wraps the Mongo shell using pexpect_ and leaves the heavy lifting to metakernel_. It is heavily based on iMongo_ by Gustavo Bezerra.
 
 .. _pexpect: https://github.com/pexpect/pexpect
 .. _metakernel: https://github.com/Calysto/metakernel/
