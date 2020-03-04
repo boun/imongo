@@ -5,13 +5,12 @@ import signal
 import uuid
 from subprocess import check_output
 
-import yaml
-from ipykernel.kernelbase import Kernel
+from metakernel import MetaKernel as Kernel
 from pexpect import replwrap, EOF
 
 from . import utils
 
-__version__ = '0.1.1'
+__version__ = '0.2.0-alpha'
 version_pat = re.compile(r'version\D*(\d+(\.\d+)+)')
 
 log_file = os.path.join(os.path.split(__file__)[0], 'imongo_kernel.log')
@@ -71,7 +70,7 @@ class MongoShellWrapper(replwrap.REPLWrapper):
                                  timeout=timeout)
 
     def run_command(self, command, timeout=-1):
-        logger.info('COMMAND ' + command)
+        #logger.info('COMMAND ' + command)
         """Send a command to the REPL, wait for and return output.
 
         :param str command: The command to send. Trailing newlines are not needed.
@@ -86,11 +85,8 @@ class MongoShellWrapper(replwrap.REPLWrapper):
         # There seems to be a limitation with pexepect/mongo when entering
         # lines longer than 1000 characters. If that is the case, a ValueError
         # exception is raised.
-        cmd_lines = [l for l in command.splitlines(
-        ) if l and not l.startswith('//')]
+        cmd_lines = [l for l in command.splitlines() if l and not l.startswith('//')]
         cmd = re.sub('\s{2,}', ' ', ' '.join(cmd_lines))
-        logger.debug('Command length: {} chars'.format(len(cmd)))
-        logger.debug('Command: {}'.format(cmd))
         if len(cmd) > 1024:
             # TODO: Enable sending lines long lines (>1024 on macOS >4096 on Linux).
             # This is related to a buffering issue and seems that can only be solved
@@ -104,14 +100,7 @@ class MongoShellWrapper(replwrap.REPLWrapper):
             raise ValueError(error.replace('\n', ' '))
 
         self._send_line(cmd)
-
         match = self._expect_prompt(timeout=timeout)
-        logger.debug('Prompt type: {}'.format(match))
-        #logger.debug('Before (%d)       : %s ' % (len(self.child.before), ":".join("{:02x}".format(ord(c)) for c in self.child.before)))
-        #logger.debug('Buffer (%d)       : %s ' % (len(self.child.buffer), ":".join("{:02x}".format(ord(c)) for c in self.child.buffer)))
-        logger.debug("Before %s " % self._isbeforeempty())
-        logger.debug("Before %s " % self._isbufferempty())
-        logger.debug("Before %s " % self.child.before)
 
         if self._isbeforeempty() and self._isbufferempty() and len(self.child.before) == 15:
             logger.debug('Extra waiting: ')
@@ -162,7 +151,7 @@ class MongoKernel(Kernel):
         return self._banner
 
     def __init__(self, **kwargs):
-        Kernel.__init__(self, **kwargs)
+        super(MongoKernel, self).__init__(**kwargs)
         logger.debug(self.language_info)
         logger.debug(self.language_version)
         logger.debug(self.banner)
@@ -185,8 +174,7 @@ class MongoKernel(Kernel):
                           attributes.sort();
                           return attributes;}"""
         try:
-            spawn_cmd = ['mongo', f'--eval "{prompt_cmd}; {dir_func}; {nop_func}"']
-            spawn_cmd += self._parse_spawn_options() + ['--shell']
+            spawn_cmd = ['mongo', f'--eval "{prompt_cmd}; {dir_func}; {nop_func}"', '--shell']
             self.mongowrapper = MongoShellWrapper(' '.join(spawn_cmd), orig_prompt=prompt,
                                                   prompt_change=None, continuation_prompt=cont_prompt)
         finally:
@@ -196,57 +184,6 @@ class MongoKernel(Kernel):
             # so that bash and its children are interruptible.
             sig = signal.signal(signal.SIGINT, signal.SIG_DFL)
             signal.signal(signal.SIGINT, sig)
-
-    @staticmethod
-    def _parse_spawn_options():
-        """
-        Parses spawn YAML command options from the default Jupyter configuration directory.
-        http://jupyter.readthedocs.io/en/latest/projects/jupyter-directories.html#configuration-files
-        """
-        config_dir = os.environ.get('JUPYTER_CONFIG_DIR')
-        if config_dir is None:
-            config_dir = '.jupyter'
-        config_path = os.path.join(os.path.expanduser(
-            '~'), config_dir, 'imongo_config.yml')
-        logger.info(f'Trying to load {config_path}')
-        try:
-            config = yaml.load(open(config_path))
-        except FileNotFoundError:
-            logger.info('Using default configuration')
-            return list()
-
-        options = []
-        for key, value in config.items():
-            if key == 'shell':
-                continue
-            elif not value:
-                options.append(f'--{key}')
-            else:
-                options.append(f'--{key} {value}')
-        return options
-
-    @staticmethod
-    @utils.exception_logger
-    def _pretty_output(json_data, show_levels=2):
-        json_str = json.dumps(json_data)
-        if json_data:
-            logger.debug('Valid JSON')
-        else:
-            logger.debug('Empty JSON')
-            return
-
-        obj_uuid = str(uuid.uuid4())
-        html_str = '<style>{}></style><div id="{}"></div>'
-        css_path = os.path.join(os.path.split(__file__)[0], 'style.css')
-        with open(css_path) as f:
-            css = f.read().replace(' ', '').replace('\n', '')
-            html_str = html_str.format(css, obj_uuid)
-        js_str = 'require(["https://rawgit.com/caldwell/renderjson/master/renderjson.js"],' \
-                 ' function() {document.getElementById(\'%s\').appendChild(' \
-                 'renderjson.set_show_to_level(%d)(%s))});'
-        js_str = js_str % (obj_uuid, show_levels, json_str)
-
-        return html_str, js_str
 
     @staticmethod
     def _parse_shell_output(shell_output):
@@ -268,29 +205,7 @@ class MongoKernel(Kernel):
                     output.append(doc)
             return output
 
-    def run_shell_command(self, cmd_lines):
-        """Execute given commads line-wise
-
-        :param list cmd_lines: A shell command per line. Currently, each line 
-        is executed in a separate child process. 
-        Note, at the moment splitting shell commands across several lines with 
-        backslashes is not supported.
-        """        
-        import sys
-        from subprocess import Popen, PIPE
-        sys_encoding = sys.getdefaultencoding()
-
-        response = []
-
-        for l in cmd_lines:
-            process = Popen(l.split(), stdout=PIPE, stderr=PIPE)
-            stdout, stderr = process.communicate()
-            response += stdout.decode(sys_encoding)
-        response = ''.join(response)
-        return response
-
-    def do_execute(self, code, silent, store_history=True,
-                   user_expressions=None, allow_stdin=False):
+    def do_execute_direct(self, code):
         if not code.strip():
             return {'status': 'ok',
                     'execution_count': self.execution_count,
@@ -299,18 +214,11 @@ class MongoKernel(Kernel):
 
         interrupted = False
         error = None
-        was_shell_cmd = False
         
         try:
-            code_lines = [l for l in code.strip().splitlines() if l]
-            if code_lines and code_lines[0].strip() == '%%bash':
-                # Execute shell commands in case of `%%bash` magic
-                was_shell_cmd = True
-                output = self.run_shell_command(code_lines[1:])
-            else:
-                output = self.mongowrapper.run_command(code.rstrip())
-                # Send a second nop, to receive ALL data
-                output += self.mongowrapper.run_command("nop()")
+            output = self.mongowrapper.run_command(code.rstrip())
+            # Send a second nop, to receive ALL data
+            output += self.mongowrapper.run_command("nop()")
         except KeyboardInterrupt:
             self.mongowrapper.child.sendeof()
             interrupted = True
@@ -330,18 +238,7 @@ class MongoKernel(Kernel):
         if interrupted:
             return {'status': 'abort', 'execution_count': self.execution_count}
 
-        if was_shell_cmd and output:
-            # Do not do any parsing into fancy JSON strings for visualization
-            # in case of shell commands
-            display_content = {
-                'source': 'kernel',
-                'data': {
-                    'text/plain': output
-                }, 'metadata': {}
-            }
-            self.send_response(self.iopub_socket, 'display_data', display_content)
-
-        if not silent and not was_shell_cmd and output:
+        if output:
             # BOUN Hier wird der String rein geworfen
             json_data = self._parse_shell_output(output)
             plain_msg = output
@@ -356,14 +253,10 @@ class MongoKernel(Kernel):
                 logger.debug(plain_msg)
                 display_content["data"]["application/json"] = json_data
 
+            logger.debug("Sending Response")
             logger.debug(display_content)
             self.send_response(self.iopub_socket, 'display_data', display_content)
 
-
-            #result = {'data': {'text/plain': output},
-            #          'execution_count': self.execution_count}
-            #logger.debug(result)
-            #self.send_response(self.iopub_socket, 'execute_result', result)
 
         # TODO: Error catching messages such as the one below:
         # 2016-11-14T12:47:11.718+0900 E QUERY    [thread1] ReferenceError: aaa is not defined : @(shell):1:1
@@ -372,53 +265,8 @@ class MongoKernel(Kernel):
         # @(shell):1:16
         # https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Error
 
-        return_msg = {'status': 'ok', 'execution_count': self.execution_count,
-                      'payload': [], 'user_expressions': {}}
-        logger.debug('Return message: {}'.format(return_msg))
-        return return_msg
+        return
 
-    def do_complete(self, code, cursor_pos):
-        # TODO: Implement. Currently not working.
+if __name__ == '__main__':
+    MongoKernel.run_as_main()
 
-        code = code[:cursor_pos]
-        default = {'matches': [], 'cursor_start': 0,
-                   'cursor_end': cursor_pos, 'metadata': dict(),
-                   'status': 'ok'}
-
-        if not code or code[-1] == ' ':
-            return default
-
-        tokens = code.replace(';', ' ').split()
-        if not tokens:
-            return default
-
-        matches = []
-        token = tokens[-1]
-        start = cursor_pos - len(token)
-
-        logger.debug('Tokens: {}'.format(tokens))
-        logger.debug('Comp code: {}'.format(code))
-
-        # matches = self.mongowrapper.run_command("dir(")
-        # [i.strip().replace(',', '').replace('"', '') for i in s.splitlines()[2:-1]]
-
-        # if token[0] == '$':
-        #     # complete variables
-        #     cmd = 'compgen -A arrayvar -A export -A variable %s' % token[1:] # strip leading $
-        #     output = self.mongowrapper.run_command(cmd).rstrip()
-        #     completions = set(output.split())
-        #     # append matches including leading $
-        #     matches.extend(['$'+c for c in completions])
-        # else:
-        #     # complete functions and builtins
-        #     cmd = 'compgen -cdfa %s' % token
-        #     output = self.mongowrapper.run_command(cmd).rstrip()
-        #     matches.extend(output.split())
-        #
-        # if not matches:
-        #     return default
-        # matches = [m for m in matches if m.startswith(token)]
-
-        return {'matches': sorted(matches), 'cursor_start': start,
-                'cursor_end': cursor_pos, 'metadata': dict(),
-                'status': 'ok'}
