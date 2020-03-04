@@ -144,7 +144,7 @@ class MongoKernel(Kernel):
         logger.debug(self.language_info)
         logger.debug(self.language_version)
         logger.debug(self.banner)
-        self._start_mongo()
+        self.connection = False
 
     def _start_mongo(self):
         """Spawns `mongo` subprocess"""
@@ -195,6 +195,13 @@ class MongoKernel(Kernel):
             return output
 
     def do_execute_direct(self, code):
+
+        # Defer connecting to mongo, otherwise the notebook blocks if mongo is
+        # not running
+        if not self.connection:
+            self._start_mongo()
+            self.connection = True
+
         if not code.strip():
             return {'status': 'ok',
                     'execution_count': self.execution_count,
