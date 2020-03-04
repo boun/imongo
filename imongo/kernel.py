@@ -10,7 +10,7 @@ from pexpect import replwrap, EOF
 
 from . import utils
 
-__version__ = '0.2.0-alpha'
+__version__ = '0.2.0'
 version_pat = re.compile(r'version\D*(\d+(\.\d+)+)')
 
 log_file = os.path.join(os.path.split(__file__)[0], 'imongo_kernel.log')
@@ -44,11 +44,6 @@ class MongoShellWrapper(replwrap.REPLWrapper):
             if l not in output[-1]:
                 output.append(l)
         return output[0]
-
-    def _isbeforeempty(self):
-        condition1 = self.child.before.strip() == '\x1b[47G\x1b[J\x1b[47G'
-        condition2 = self.child.before.strip() == ''
-        return condition1 or condition2
 
     def _isbufferempty(self):
         condition1 = self.child.buffer.strip() == '\x1b[47G\x1b[J\x1b[47G'
@@ -102,12 +97,6 @@ class MongoShellWrapper(replwrap.REPLWrapper):
         self._send_line(cmd)
         match = self._expect_prompt(timeout=timeout)
 
-        if self._isbeforeempty() and self._isbufferempty() and len(self.child.before) == 15:
-            logger.debug('Extra waiting: ')
-            match = self._expect_prompt(timeout=1)
-    
-
-        logger.debug('Iterating over message')
         response = []
         while not self._isbufferempty():
             response.append(self.child.before)
