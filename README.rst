@@ -5,9 +5,12 @@ A MongoDB kernel for Jupyter Lab. Mainly for educational purposes.
 
 This kernel wraps the Mongo shell using pexpect_ and leaves the heavy lifting to metakernel_. It is heavily based on iMongo_ by Gustavo Bezerra.
 
+TODO: Change to more metakernel infrastructure as https://github.com/Jaesin/psysh_kernel/blob/master/psysh_kernel/kernel.py
+doc; https://github.com/Calysto/metakernel/blob/master/metakernel/replwrap.py
+
 .. _pexpect: https://github.com/pexpect/pexpect
 .. _metakernel: https://github.com/Calysto/metakernel/
-.. _iMongo: https://github.com/Calysto/metakernel/
+.. _iMongo (original Version by Gustavo Bezerra): https://github.com/gusutabopb/imongo
 
 .. figure:: screenshot.png
    :alt: IMongo in action
@@ -25,24 +28,14 @@ IMongo requires Jupyter_ and MongoDB_.
 .. _Jupyter: http://jupyter.org
 .. _MongoDB: https://www.mongodb.com
 
-Install MongoDB
-^^^^^^^^^^^^^^^
-
-On macOS, use Homebrew_: ``brew install mongodb``
-
-For other platforms, please refer to the MongoDB documentation_
-
-.. _Homebrew: http://brew.sh/
-.. _documentation: https://docs.mongodb.com/manual/installation/
-
 Install Jupyter and IMongo Kernel using ``pip``
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-To install Jupyter, IMongo and all other dependencies, use ``pip install``:
+To install Jupyter, this IMongo Kernel and all other dependencies, use ``pip install``:
 
 .. code:: bash
 
-    $ pip install imongo-kernel
+    $ git+https://github.com/boun/imongo#egg=imongo-kernel
 
 TODO:
 -----
