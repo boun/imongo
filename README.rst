@@ -1,3 +1,9 @@
+Purpose:
+=======
+
+Purpose of this branch is to port the kernel infrastrcture to Processkernel: [](https://github.com/Calysto/metakernel/blob/master/metakernel/process_metakernel.py)
+
+
 imongo
 ======
 
