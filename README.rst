@@ -10,7 +10,7 @@ doc; https://github.com/Calysto/metakernel/blob/master/metakernel/replwrap.py
 
 .. _pexpect: https://github.com/pexpect/pexpect
 .. _metakernel: https://github.com/Calysto/metakernel/
-.. _iMongo (original Version by Gustavo Bezerra): https://github.com/gusutabopb/imongo
+.. _iMongo: https://github.com/gusutabopb/imongo
 
 .. figure:: screenshot.png
    :alt: IMongo in action
