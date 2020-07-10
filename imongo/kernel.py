@@ -5,7 +5,7 @@ import signal
 import uuid
 from subprocess import check_output
 
-from metakernel import MetaKernel as Kernel
+from metakernel import ProcessMetaKernel as Kernel
 from pexpect import replwrap, EOF
 
 from . import utils
@@ -19,6 +19,7 @@ logger.info(f'Logging to {log_file}')
 
 
 class MongoShellWrapper(replwrap.REPLWrapper):
+    child = {}
     """
     A subclass of REPLWrapper specific for the MongoDB shell.
     run_command is the only method overridden.
@@ -26,7 +27,7 @@ class MongoShellWrapper(replwrap.REPLWrapper):
 
     def __init__(self, *args, **kwargs):
         replwrap.REPLWrapper.__init__(self, *args, **kwargs)
-        logger.info('Making MyREPLWrapper')
+        logger.info('Constructor MongoShellWrapper')
         self.args = args
         self.kwargs = kwargs
 
@@ -64,8 +65,8 @@ class MongoShellWrapper(replwrap.REPLWrapper):
         return self.child.expect([self.prompt, self.continuation_prompt],
                                  timeout=timeout)
 
-    def run_command(self, command, timeout=-1):
-        #logger.info('COMMAND ' + command)
+    def run_command(self, command, timeout=-1, **kwargs):
+        logger.info('COMMAND ' + command[:200])
         """Send a command to the REPL, wait for and return output.
 
         :param str command: The command to send. Trailing newlines are not needed.
@@ -146,7 +147,7 @@ class MongoKernel(Kernel):
         logger.debug(self.banner)
         self.connection = False
 
-    def _start_mongo(self):
+    def makeWrapper(self):
         """Spawns `mongo` subprocess"""
 
         prompt = 'mongo{}mongo'.format(uuid.uuid4())
@@ -164,7 +165,7 @@ class MongoKernel(Kernel):
                           return attributes;}"""
         try:
             spawn_cmd = ['mongo', f'--eval "{prompt_cmd}; {dir_func}; {nop_func}"', '--shell']
-            self.mongowrapper = MongoShellWrapper(' '.join(spawn_cmd), orig_prompt=prompt,
+            wrapper = MongoShellWrapper(' '.join(spawn_cmd), orig_prompt=prompt,
                                                   prompt_change=None, continuation_prompt=cont_prompt)
         finally:
             # Signal handlers are inherited by forked processes, and we can't easily
@@ -174,8 +175,10 @@ class MongoKernel(Kernel):
             sig = signal.signal(signal.SIGINT, signal.SIG_DFL)
             signal.signal(signal.SIGINT, sig)
 
+        return wrapper
+
     @staticmethod
-    def _parse_shell_output(shell_output):
+    def _parse_shell_output_to_json(shell_output):
         logger.debug("OUT: " + shell_output)
         json_loader = utils.exception_logger(json.loads)
 
@@ -185,6 +188,7 @@ class MongoKernel(Kernel):
         except json.JSONDecodeError:
             output = []
             for doc in [line for line in shell_output.splitlines() if line]:
+                doc = re.sub('WriteResult\((.*?)\)', '{"$result": "\\1"}', doc)
                 doc = re.sub('ISODate\(\"(.*?)\"\)', '{"$date": "\\1"}', doc)
                 doc = re.sub('ObjectId\(\"(.*?)\"\)', '{"$oid": "\\1"}', doc)
                 doc = re.sub('NumberLong\(\"(.*?)\"\)',
@@ -198,60 +202,31 @@ class MongoKernel(Kernel):
 
         # Defer connecting to mongo, otherwise the notebook blocks if mongo is
         # not running
-        if not self.connection:
-            self._start_mongo()
-            self.connection = True
-
-        if not code.strip():
-            return {'status': 'ok',
-                    'execution_count': self.execution_count,
-                    'payload': [],
-                    'user_expressions': {}}
-
-        interrupted = False
-        error = None
-        
-        try:
-            output = self.mongowrapper.run_command(code.rstrip())
-            # Send a second nop, to receive ALL data
-            output += self.mongowrapper.run_command("nop()")
-        except KeyboardInterrupt:
-            self.mongowrapper.child.sendeof()
-            interrupted = True
-            output = None
-            error = 'KeyboardInterrupt.'
-            self._start_mongo()
-        except (EOF, ValueError, RuntimeError) as e:
-            output = None
-            error = e.args[0]
-            self._start_mongo()
-        finally:
-            if error:
-                error_msg = {'name': 'stderr', 'text': error +
-                             '\nRestarting mongo shell...'}
-                self.send_response(self.iopub_socket, 'stream', error_msg)
-
-        if interrupted:
-            return {'status': 'abort', 'execution_count': self.execution_count}
+        output = super(MongoKernel, self).do_execute_direct(code, True)
+        output.output += self.wrapper.run_command("nop()")
+        if self.kernel_resp["status"] != "ok":
+            error_msg = {'name': 'stderr', 'text': self.kernel_resp}
+            self.send_response(self.iopub_socket, 'stream', self.kernel_resp)
 
         if output:
             # BOUN Hier wird der String rein geworfen
-            json_data = self._parse_shell_output(output)
+            output = output.output
+            json_data = self._parse_shell_output_to_json(output)
             plain_msg = output
 
-            display_content = {
-                'source': 'kernel',
-                'data': {
-                    'text/plain': plain_msg
-                }, 'metadata': {}
-            }
             if json_data:
+                display_content = {
+                    'data': {
+                        'application/json': json_data
+                    }, 'metadata': {}
+                }
+                logger.debug("JSON Response")
+                logger.debug(display_content)
+                self.send_response(self.iopub_socket, 'display_data', display_content)
+            else:
+                logger.debug("PLAIN Response")
                 logger.debug(plain_msg)
-                display_content["data"]["application/json"] = json_data
-
-            logger.debug("Sending Response")
-            logger.debug(display_content)
-            self.send_response(self.iopub_socket, 'display_data', display_content)
+                self.send_response(self.iopub_socket, 'stream', {'name': 'stdout', 'text': (plain_msg)})
 
 
         # TODO: Error catching messages such as the one below:
