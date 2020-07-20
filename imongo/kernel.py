@@ -204,13 +204,14 @@ class MongoKernel(Kernel):
         # Defer connecting to mongo, otherwise the notebook blocks if mongo is
         # not running
         output = super(MongoKernel, self).do_execute_direct(code, True)
-        output.output += self.wrapper.run_command("nop()")
+        if output:
+            output.output += self.wrapper.run_command("nop()")
+
         if self.kernel_resp["status"] != "ok":
             error_msg = {'name': 'stderr', 'text': self.kernel_resp}
             self.send_response(self.iopub_socket, 'stream', self.kernel_resp)
 
         if output:
-            # BOUN Hier wird der String rein geworfen
             output = output.output
             json_data = self._parse_shell_output_to_json(output)
             plain_msg = output
