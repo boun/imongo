@@ -48,4 +48,3 @@ TODO:
 
 -  Implement code completion functionality
 -  Fix long command issue
--  Send Mongo shell Javascript errors/exceptions to stderr

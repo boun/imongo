@@ -2,6 +2,7 @@ import json
 import os
 import re
 import signal
+import dateutil.parser
 import uuid
 from subprocess import check_output
 
@@ -96,16 +97,16 @@ class MongoShellWrapper(replwrap.REPLWrapper):
             raise ValueError(error.replace('\n', ' '))
 
         self._send_line(cmd)
-        match = self._expect_prompt(timeout=timeout)
+        matched_index = self._expect_prompt(timeout=timeout)
 
         response = []
         while not self._isbufferempty():
             response.append(self.child.before)
             logger.debug('Buffer not empty, sending blank line')
-            match = self._expect_prompt(timeout=timeout)
-            if match == 1:
-                # If continuation prompt is detected, restart child (by raising
-                # ValueError)
+            matched_index = self._expect_prompt(timeout=timeout)
+            if matched_index == 1:
+                # If continuation prompt is detected (by the match in
+                # _expect_prompt), restart child (by raising ValueError)
                 error = ('Code incomplete. Please enter valid and complete code.\n'
                          'Continuation prompt functionality not implemented yet.')
                 logger.error(error.replace('\n', ' '))
@@ -223,18 +224,19 @@ class MongoKernel(Kernel):
                 logger.debug("JSON Response")
                 logger.debug(display_content)
                 self.send_response(self.iopub_socket, 'display_data', display_content)
-            else:
-                logger.debug("PLAIN Response")
-                logger.debug(plain_msg)
-                self.send_response(self.iopub_socket, 'stream', {'name': 'stdout', 'text': (plain_msg)})
+                return
 
-
-        # TODO: Error catching messages such as the one below:
-        # 2016-11-14T12:47:11.718+0900 E QUERY    [thread1] ReferenceError: aaa is not defined : @(shell):1:1
-        # 2017-01-25T13:15:50.804+0900 E QUERY    [thread1] SyntaxError: expected expression, got '}' @(shell):1:12
-        # 2017-02-13T22:09:16.483+0900 E QUERY    [main] TypeError: db.find is not a function :
-        # @(shell):1:16
-        # https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Error
+            logger.debug("PLAIN Response -- Check for Error")
+            logger.debug(plain_msg)
+            try:
+                ts = dateutil.parser.parse( plain_msg.split(" ")[0])
+                self.send_response(self.iopub_socket, 'stream', {'name': 'stderr', 'text': (plain_msg)})
+                logger.debug("ERROR Response")
+                return
+            except Exception as e:
+                pass
+            
+            self.send_response(self.iopub_socket, 'stream', {'name': 'stdout', 'text': (plain_msg)})
 
         return
 
