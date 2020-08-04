@@ -43,3 +43,10 @@ TODO:
 -  Implement code completion functionality
 -  Fix long command issue
 -  Send Mongo shell Javascript errors/exceptions to stderr
+
+Acknowledgments:
+-----
+A part of this work was supported by the European Social Fund
+
+.. figure:: images/esf_logo.png
+.. figure:: images/vhb_logo.png
