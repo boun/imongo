@@ -48,3 +48,11 @@ TODO:
 
 -  Implement code completion functionality
 -  Fix long command issue
+
+Acknowledgments:
+-----
+A part of this work was supported by the European Social Fund
+
+.. figure:: images/esf_logo.png
+.. figure:: images/vhb_logo.png
+
